@@ -17,12 +17,14 @@ void FileSystem::debug(Disk *disk) {
     disk->read(0, block.Data);
 
     printf("SuperBlock:\n");
-    printf("    magic number is %s\n", block.Super.MagicNumber == MAGIC_NUMBER ? "valid" : "invalid");
+    printf("    magic number is %s\n", 
+        block.Super.MagicNumber == MAGIC_NUMBER ? "valid" : "invalid");
     printf("    %u blocks\n"         , block.Super.Blocks);
     printf("    %u inode blocks\n"   , block.Super.InodeBlocks);
     printf("    %u inodes\n"         , block.Super.Inodes);
 
     // Read Inode blocks
+    // for ()
 }
 
 // Format file system ----------------------------------------------------------

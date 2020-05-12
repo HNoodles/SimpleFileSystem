@@ -1,4 +1,4 @@
-# Operating System I - Project I SimpleFS
+# Operating System I - Project I Simple File System
 
 ### 17302010002 黄元敏
 
