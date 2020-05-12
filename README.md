@@ -10,7 +10,7 @@ Design
 1. To implement `Filesystem::debug`, you will need to load the file system
    data structures and report the **superblock** and **inodes**.
       - How will you read the superblock?
-           - The superblock contains four numbers, the magic number, the number of blocks, the number of inode blocks and the number of inodes. They can be read in using the Data block type in the defined union Block and then be interpreted using the Super block type. 
+           - The superblock contains four numbers, the magic number, the number of blocks, the number of inode blocks and the number of inodes. They can be read in using the Data block type in the defined union Block and then be interpreted easily using the Super block type. 
       - How will you traverse all the inodes?
       - How will you determine all the information related to an inode?
       - How will you determine all the blocks related to an inode?
