@@ -13,23 +13,23 @@
 // Debug file system -----------------------------------------------------------
 
 void FileSystem::debug(Disk *disk) {
-    Block block;
+    Block superBlock;
 
     // Read Superblock
-    disk->read(0, block.Data);
+    disk->read(0, superBlock.Data);
 
     printf("SuperBlock:\n");
     printf("    magic number is %s\n", 
-        block.Super.MagicNumber == MAGIC_NUMBER ? "valid" : "invalid");
-    printf("    %u blocks\n"         , block.Super.Blocks);
-    printf("    %u inode blocks\n"   , block.Super.InodeBlocks);
-    printf("    %u inodes\n"         , block.Super.Inodes);
+        superBlock.Super.MagicNumber == MAGIC_NUMBER ? "valid" : "invalid");
+    printf("    %u blocks\n"         , superBlock.Super.Blocks);
+    printf("    %u inode blocks\n"   , superBlock.Super.InodeBlocks);
+    printf("    %u inodes\n"         , superBlock.Super.Inodes);
 
     // Read Inode blocks
     Block inodeBlock;
     // unsigned int inodeCount = 1;
     // loop over inode blocks
-    for (unsigned int i = 0; i < block.Super.InodeBlocks; i++) {
+    for (unsigned int i = 0; i < superBlock.Super.InodeBlocks; i++) {
         // read in one inode block
         disk->read(i + 1, inodeBlock.Data);
 
@@ -76,9 +76,25 @@ void FileSystem::debug(Disk *disk) {
 // Format file system ----------------------------------------------------------
 
 bool FileSystem::format(Disk *disk) {
+    // return false if mounted
+    if (disk->mounted())
+        return false;
+
     // Write superblock
+    Block superBlock;
+    superBlock.Super.MagicNumber = MAGIC_NUMBER;
+    superBlock.Super.Blocks = disk->size();
+    superBlock.Super.InodeBlocks = 0.1 * disk->size() + 0.5; // 0.5 for rounding
+    superBlock.Super.Inodes = superBlock.Super.InodeBlocks * INODES_PER_BLOCK;
+    disk->write(0, superBlock.Data);
 
     // Clear all other blocks
+    Block empty;
+    memset(empty.Data, 0, disk->BLOCK_SIZE);
+    for (unsigned int i = 1; i < superBlock.Super.Blocks; i++) {
+        disk->write(i, empty.Data);
+    }
+
     return true;
 }
 
