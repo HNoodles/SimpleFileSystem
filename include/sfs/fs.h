@@ -5,6 +5,7 @@
 #include "sfs/disk.h"
 
 #include <stdint.h>
+#include <string>
 
 class FileSystem {
 public:
@@ -36,6 +37,7 @@ private:
     };
 
     // TODO: Internal helper functions
+    static void readArray(uint32_t array[], size_t size, std::string* string);
 
     // TODO: Internal member variables
 

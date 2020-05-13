@@ -8,8 +8,6 @@
 #include <stdio.h>
 #include <string.h>
 
-#include <string>
-
 // Debug file system -----------------------------------------------------------
 
 void FileSystem::debug(Disk *disk) {
@@ -43,12 +41,7 @@ void FileSystem::debug(Disk *disk) {
             
             // loop over direct blocks
             std::string directBlocks = "";
-            for (unsigned int k = 0; k < POINTERS_PER_INODE; k++) {
-                if (inode.Direct[k]) {// if is 0, means null
-                    directBlocks += " ";
-                    directBlocks += std::to_string(inode.Direct[k]);
-                }
-            }
+            readArray(inode.Direct, POINTERS_PER_INODE, &directBlocks);
             printf("Inode %u:\n", j);
             printf("    size: %u bytes\n", inode.Size);
             printf("    direct blocks:%s\n", directBlocks.c_str());
@@ -61,12 +54,7 @@ void FileSystem::debug(Disk *disk) {
             Block indirect;
             disk->read(inode.Indirect, indirect.Data);
             std::string indirectBlocks = "";
-            for (unsigned int k = 0; k < POINTERS_PER_BLOCK; k++) {
-                if (indirect.Pointers[k]) {// if is 0, means null
-                    indirectBlocks += " ";
-                    indirectBlocks += std::to_string(indirect.Pointers[k]);
-                }
-            }
+            readArray(indirect.Pointers, POINTERS_PER_BLOCK, &indirectBlocks);
             printf("    indirect block: %u\n", inode.Indirect);
             printf("    indirect data blocks:%s\n", indirectBlocks.c_str());
         }
@@ -159,4 +147,14 @@ ssize_t FileSystem::write(size_t inumber, char *data, size_t length, size_t offs
     
     // Write block and copy to data
     return 0;
+}
+
+// Helper functions 
+void FileSystem::readArray(uint32_t array[], size_t size, std::string* string) {
+    for (unsigned int i = 0; i < size; i++) {
+        if (array[i]) {// if is 0, means null
+            *string += " ";
+            *string += std::to_string(array[i]);
+        }
+    }
 }
