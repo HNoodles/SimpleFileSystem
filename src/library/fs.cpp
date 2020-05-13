@@ -8,6 +8,8 @@
 #include <stdio.h>
 #include <string.h>
 
+#include <string>
+
 // Debug file system -----------------------------------------------------------
 
 void FileSystem::debug(Disk *disk) {
@@ -24,7 +26,51 @@ void FileSystem::debug(Disk *disk) {
     printf("    %u inodes\n"         , block.Super.Inodes);
 
     // Read Inode blocks
-    // for ()
+    Block inodeBlock;
+    // unsigned int inodeCount = 1;
+    // loop over inode blocks
+    for (unsigned int i = 0; i < block.Super.InodeBlocks; i++) {
+        // read in one inode block
+        disk->read(i + 1, inodeBlock.Data);
+
+        // loop over inodes in the block
+        for (unsigned int j = 0; j < INODES_PER_BLOCK; j++) {
+            Inode inode = inodeBlock.Inodes[j];
+
+            // skip invalid inode
+            if (!inode.Valid)
+                continue;
+            
+            // loop over direct blocks
+            std::string directBlocks = "";
+            for (unsigned int k = 0; k < POINTERS_PER_INODE; k++) {
+                if (inode.Direct[k]) {// if is 0, means null
+                    directBlocks += " ";
+                    directBlocks += std::to_string(inode.Direct[k]);
+                }
+            }
+            printf("Inode %u:\n", j);
+            printf("    size: %u bytes\n", inode.Size);
+            printf("    direct blocks:%s\n", directBlocks.c_str());
+
+            // skip invalid indirect node
+            if (!inode.Indirect)
+                continue;
+            
+            // loop over indirect blocks
+            Block indirect;
+            disk->read(inode.Indirect, indirect.Data);
+            std::string indirectBlocks = "";
+            for (unsigned int k = 0; k < POINTERS_PER_BLOCK; k++) {
+                if (indirect.Pointers[k]) {// if is 0, means null
+                    indirectBlocks += " ";
+                    indirectBlocks += std::to_string(indirect.Pointers[k]);
+                }
+            }
+            printf("    indirect block: %u\n", inode.Indirect);
+            printf("    indirect data blocks:%s\n", indirectBlocks.c_str());
+        }
+    }
 }
 
 // Format file system ----------------------------------------------------------
