@@ -6,6 +6,7 @@
 
 #include <stdint.h>
 #include <string>
+#include <vector>
 
 class FileSystem {
 public:
@@ -36,10 +37,21 @@ private:
     	char	    Data[Disk::BLOCK_SIZE];	    // Data block
     };
 
-    // TODO: Internal helper functions
+    // Internal helper functions
+    void initialize_free_blocks();
+    size_t allocate_free_block();
+
     static void readArray(uint32_t array[], size_t size, std::string* string);
 
-    // TODO: Internal member variables
+    // Internal member variables
+    Disk                *disk;
+    size_t              blocks;
+    size_t              inodeBlocks;
+    std::vector<int>    bitMap; 
+
+    // 1 means block is free, 0 means block occupied
+    const int FREE     = 1;
+    const int OCCUPIED = 0;
 
 public:
     static void debug(Disk *disk);

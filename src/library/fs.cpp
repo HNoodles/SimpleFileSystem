@@ -25,14 +25,13 @@ void FileSystem::debug(Disk *disk) {
 
     // Read Inode blocks
     Block inodeBlock;
-    // unsigned int inodeCount = 1;
     // loop over inode blocks
-    for (unsigned int i = 0; i < superBlock.Super.InodeBlocks; i++) {
+    for (size_t i = 0; i < superBlock.Super.InodeBlocks; i++) {
         // read in one inode block
         disk->read(i + 1, inodeBlock.Data);
 
         // loop over inodes in the block
-        for (unsigned int j = 0; j < INODES_PER_BLOCK; j++) {
+        for (size_t j = 0; j < INODES_PER_BLOCK; j++) {
             Inode inode = inodeBlock.Inodes[j];
 
             // skip invalid inode
@@ -42,9 +41,9 @@ void FileSystem::debug(Disk *disk) {
             // loop over direct blocks
             std::string directBlocks = "";
             readArray(inode.Direct, POINTERS_PER_INODE, &directBlocks);
-            printf("Inode %u:\n", j);
-            printf("    size: %u bytes\n", inode.Size);
-            printf("    direct blocks:%s\n", directBlocks.c_str());
+            printf("Inode %zu:\n"            , j);
+            printf("    size: %u bytes\n"   , inode.Size);
+            printf("    direct blocks:%s\n" , directBlocks.c_str());
 
             // skip invalid indirect node
             if (!inode.Indirect)
@@ -55,8 +54,8 @@ void FileSystem::debug(Disk *disk) {
             disk->read(inode.Indirect, indirect.Data);
             std::string indirectBlocks = "";
             readArray(indirect.Pointers, POINTERS_PER_BLOCK, &indirectBlocks);
-            printf("    indirect block: %u\n", inode.Indirect);
-            printf("    indirect data blocks:%s\n", indirectBlocks.c_str());
+            printf("    indirect block: %u\n"       , inode.Indirect);
+            printf("    indirect data blocks:%s\n"  , indirectBlocks.c_str());
         }
     }
 }
@@ -79,7 +78,7 @@ bool FileSystem::format(Disk *disk) {
     // Clear all other blocks
     Block empty;
     memset(empty.Data, 0, disk->BLOCK_SIZE);
-    for (unsigned int i = 1; i < superBlock.Super.Blocks; i++) {
+    for (size_t i = 1; i < superBlock.Super.Blocks; i++) {
         disk->write(i, empty.Data);
     }
 
@@ -89,13 +88,29 @@ bool FileSystem::format(Disk *disk) {
 // Mount file system -----------------------------------------------------------
 
 bool FileSystem::mount(Disk *disk) {
+    // return false if mounted, prevent repeated mounting
+    if (disk->mounted())
+        return false;
+
     // Read superblock
+    Block superBlock;
+    disk->read(0, superBlock.Data);
+
+    if (superBlock.Super.MagicNumber != MAGIC_NUMBER  // check magic number
+    || superBlock.Super.InodeBlocks != superBlock.Super.Blocks * 0.1 + 0.5  // check inode ratio
+    || superBlock.Super.Inodes != superBlock.Super.InodeBlocks * INODES_PER_BLOCK) // check inode number
+        return false;
 
     // Set device and mount
+    disk->mount();
 
     // Copy metadata
+    this->disk = disk;
+    this->blocks = superBlock.Super.Blocks;
+    this->inodeBlocks = superBlock.Super.InodeBlocks;
 
     // Allocate free block bitmap
+    initialize_free_blocks();
 
     return true;
 }
@@ -149,9 +164,49 @@ ssize_t FileSystem::write(size_t inumber, char *data, size_t length, size_t offs
     return 0;
 }
 
-// Helper functions 
+// Helper functions ------------------------------------------------------------
+void FileSystem::initialize_free_blocks() {
+    bitMap = std::vector<int>(blocks, FREE);
+
+    // super block is occupied
+    bitMap[0] = OCCUPIED;
+
+    // Read Inode blocks
+    Block inodeBlock;
+    // loop over inode blocks
+    for (size_t i = 0; i < inodeBlocks; i++) {
+        // read in one inode block
+        disk->read(i + 1, inodeBlock.Data);
+
+        // loop over inodes in the block
+        for (size_t j = 0; j < INODES_PER_BLOCK; j++) {
+            Inode inode = inodeBlock.Inodes[j];
+
+            // skip invalid inode
+            if (!inode.Valid)
+                continue;
+            
+            // loop over direct blocks
+            for (size_t k = 0; k < POINTERS_PER_INODE; k++) {
+                bitMap[inode.Direct[k]] = OCCUPIED;
+            }
+
+            // skip invalid indirect node
+            if (!inode.Indirect)
+                continue;
+            
+            // loop over indirect blocks
+            Block indirect;
+            disk->read(inode.Indirect, indirect.Data);
+            for (size_t k = 0; k < POINTERS_PER_BLOCK; k++) {
+                bitMap[indirect.Pointers[k]] = OCCUPIED;
+            }
+        }
+    }
+}
+
 void FileSystem::readArray(uint32_t array[], size_t size, std::string* string) {
-    for (unsigned int i = 0; i < size; i++) {
+    for (size_t i = 0; i < size; i++) {
         if (array[i]) {// if is 0, means null
             *string += " ";
             *string += std::to_string(array[i]);
