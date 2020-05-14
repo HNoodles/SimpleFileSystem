@@ -97,7 +97,7 @@ bool FileSystem::mount(Disk *disk) {
     disk->read(0, superBlock.Data);
 
     if (superBlock.Super.MagicNumber != MAGIC_NUMBER  // check magic number
-    || superBlock.Super.InodeBlocks != superBlock.Super.Blocks * 0.1 + 0.5  // check inode ratio
+    || superBlock.Super.InodeBlocks != (size_t)((float)(superBlock.Super.Blocks * 0.1) + 0.5)  // check inode ratio
     || superBlock.Super.Inodes != superBlock.Super.InodeBlocks * INODES_PER_BLOCK) // check inode number
         return false;
 
@@ -207,7 +207,13 @@ bool FileSystem::remove(size_t inumber) {
 
 ssize_t FileSystem::stat(size_t inumber) {
     // Load inode information
-    return 0;
+    Inode inode;
+    if (!load_inode(inumber, &inode)) {
+        // invalid inode to remove
+        return -1;
+    }
+    
+    return inode.Size;
 }
 
 // Read from inode -------------------------------------------------------------
@@ -272,7 +278,7 @@ void FileSystem::initialize_free_blocks() {
 }
 
 bool FileSystem::load_inode(size_t inumber, Inode *node) {
-    size_t blockIndex = inumber / INODES_PER_BLOCK + 1;
+    size_t blockIndex = (inumber / INODES_PER_BLOCK) + 1;
     size_t pointerIndex = inumber % INODES_PER_BLOCK;
 
     // read the whole block
@@ -286,7 +292,7 @@ bool FileSystem::load_inode(size_t inumber, Inode *node) {
 }
 
 bool FileSystem::save_inode(size_t inumber, Inode *node) {
-    size_t blockIndex = inumber / INODES_PER_BLOCK + 1;
+    size_t blockIndex = (inumber / INODES_PER_BLOCK) + 1;
     size_t pointerIndex = inumber % INODES_PER_BLOCK;
 
     // read the whole block
