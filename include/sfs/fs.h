@@ -39,7 +39,7 @@ private:
 
     // Internal helper functions
     void initialize_free_blocks();
-    size_t allocate_free_block();
+    ssize_t allocate_free_block();
 
     bool load_inode(size_t inumber, Inode *node);
     bool save_inode(size_t inumber, Inode *node);

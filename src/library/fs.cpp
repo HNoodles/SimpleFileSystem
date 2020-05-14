@@ -120,56 +120,23 @@ bool FileSystem::mount(Disk *disk) {
 
 ssize_t FileSystem::create() {
     // Locate free inode in inode table
-    // Read Inode blocks
-    Block inodeBlock;
-    Inode inode;
-    // loop over inode blocks to find an empty inode
-    ssize_t inumber = -1;
-    for (size_t i = 0; i < inodeBlocks; i++) {
-        // read in one inode block
-        disk->read(i + 1, inodeBlock.Data);
+    ssize_t inumber = allocate_free_block();
 
-        // loop over inodes in the block
-        for (size_t j = 0; j < INODES_PER_BLOCK; j++) {
-            inode = inodeBlock.Inodes[j];
-            // find invalid inode
-            if (!inode.Valid) {
-                inumber = i * INODES_PER_BLOCK + j;
-                break;
-            }
+    // found, write inode
+    if (inumber != -1) {
+        Inode inode;
+        inode.Valid = 1;
+        inode.Size = 0;
+        for (size_t k = 0; k < POINTERS_PER_INODE; k++) {
+            inode.Direct[k] = 0;
         }
+        inode.Indirect = 0;
 
-        // break if already found an empty inode
-        if (inumber != -1) {
-            break;
-        }
+        // write inode onto disk
+        save_inode(inumber, &inode);
     }
-    // loop over inodes
-    // Inode inode;
-    // size_t i;
-    // for (i = 0; i < inodes; i++) {
-    //     // find an invalid node 
-    //     if (!load_inode(i, &inode)) 
-    //         break;
-    // }
-    
-    // not found, create failed
-    if (inumber == -1)
-        return inumber;
 
-    // found, set valid bit and size
-    inode.Valid = 1;
-    inode.Size = 0;
-    // set direct and indirect
-    for (size_t k = 0; k < POINTERS_PER_INODE; k++) {
-        inode.Direct[k] = 0;
-    }
-    inode.Indirect = 0;
-
-    // write inode onto disk
-    save_inode(inumber, &inode);
-
-    // Record inode if found
+    // Record inode, if not found, inumber = -1
     return inumber;
 }
 
@@ -237,6 +204,7 @@ ssize_t FileSystem::write(size_t inumber, char *data, size_t length, size_t offs
 }
 
 // Helper functions ------------------------------------------------------------
+
 void FileSystem::initialize_free_blocks() {
     bitMap = std::vector<int>(blocks, FREE);
 
@@ -275,6 +243,28 @@ void FileSystem::initialize_free_blocks() {
             }
         }
     }
+}
+
+ssize_t FileSystem::allocate_free_block() {
+    // Read Inode blocks
+    Block inodeBlock;
+    Inode inode;
+    // loop over inode blocks to find an empty inode
+    ssize_t inumber = -1;
+    for (size_t i = 0; i < inodeBlocks; i++) {
+        // read in one inode block
+        disk->read(i + 1, inodeBlock.Data);
+
+        // loop over inodes in the block
+        for (size_t j = 0; j < INODES_PER_BLOCK; j++) {
+            inode = inodeBlock.Inodes[j];
+            // find invalid inode
+            if (!inode.Valid) {
+                return i * INODES_PER_BLOCK + j;
+            }
+        }
+    }
+    return inumber; // = -1
 }
 
 bool FileSystem::load_inode(size_t inumber, Inode *node) {
