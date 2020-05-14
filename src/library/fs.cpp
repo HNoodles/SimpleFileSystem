@@ -118,10 +118,6 @@ bool FileSystem::mount(Disk *disk) {
 // Create inode ----------------------------------------------------------------
 
 ssize_t FileSystem::create() {
-    // // the disk should first be mounted
-    // if (!disk->mounted())
-    //     return -1;
-
     // Locate free inode in inode table
     // Read Inode blocks
     Block inodeBlock;
@@ -250,18 +246,18 @@ void FileSystem::initialize_free_blocks() {
 }
 
 bool FileSystem::save_inode(size_t inumber, Inode *node) {
-    uint32_t blockNum = inumber / INODES_PER_BLOCK + 1;
-    uint32_t pointer = inumber % INODES_PER_BLOCK;
+    uint32_t blockIndex = inumber / INODES_PER_BLOCK + 1;
+    uint32_t pointerIndex = inumber % INODES_PER_BLOCK;
 
     // read the whole block
     Block block;
-    disk->read(blockNum, block.Data);
+    disk->read(blockIndex, block.Data);
 
     // modify the inode
-    block.Inodes[pointer] = *node;
+    block.Inodes[pointerIndex] = *node;
 
     // write back
-    disk->write(blockNum, block.Data);
+    disk->write(blockIndex, block.Data);
 
     return true;
 }
