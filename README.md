@@ -49,6 +49,7 @@ Design
       - How will you locate a free inode?
         - This is a relatively basic operation which only calls for a double loop to go through every inode block of a disk then every inode of an inode block. The program doesn't pursue performance, so we can simply do a linear scan and record the first invalid inode we find which would be the free inode we are looking for. 
         - If no empty inode was found, -1 should be returned. 
+        - This work is done by `FileSystem::allocate_free_block` suggested by the document. 
       - What information would you see in a new inode?
         - The new inode should hava `Valid = 1`, `Size = 0`, `Direct[0 ~ (POINTERS_PER_INODE - 1)] = 0` and `Indirect = 0`. 
       - How will you record this new inode?
@@ -59,18 +60,22 @@ Design
 5. To implement `FileSystem::remove`, you will need to locate the inode and then free its associated blocks.
 
       - How will you determine if the specified inode is valid?
+        - Firstly, I implemented `FileSystem::load_inode` as suggested, which is quite similar to `FileSystem::save_inode` except for the value assignment to `Inode *` and the return value `node->Valid`. 
+        - By utilizing the `load_inode` function, I can load the indicated inode gracefully with `inumber`, of which the validity is determined by its `Valid` value. When we want to remove an inode, the `Valid` should surely be 1 instead of 0. According to the definition of `load_inode`, the validity can be determined according to the return value of the function. 
       - How will you free the direct blocks?
+        - Just go through the `Direct` array using a loop and mark all corresponding element in vector `bitMap` as `FREE`. The actual value of `Direct` array doesn't need to be reset because it would be done when `create` is called. A lazy strategy can be used here to improve performance. 
       - How will you free the indirect blocks?
+        - This work is just like freeing direct blocks except that we should make sure that the inode does have indirect blocks by examining `inode.Indirect != 0`. 
       - How will you update the inode table?
-
-
+        - The only value needs to be changed is `inode.Valid` according to the lazy strategy. After setting `Valid = 0`, just call `save_inode` to write the inode back to disk. 
 
 6. To implement `FileSystem::stat`, you will need to locate the inode and return its size.
    
       - How will you determine if the specified inode is valid?
+        - Just make sure that `inode.Valid == 1`, otherwise, return -1. 
+        - Again, `load_inode` is a useful helper. 
       - How will you determine the inode's size?
-
-
+        - The size of an inode can simply be retrieved by reading `inode.Size`. 
 
 7. To implement `FileSystem::read`, you will need to locate the inode and copy data from appropriate blocks to the user-specified data buffer.
 
