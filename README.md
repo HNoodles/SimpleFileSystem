@@ -32,11 +32,17 @@ Design
 3. To implement `FileSystem::mount`, you will need to prepare a filesystem for use by reading the superblock and allocating the free block bitmap.
 
       - What pre-condition must be true before this operation can succeed?
+        - The disk hasn't been mounted. 
       - What sanity checks must you perform?
+        - The `MagicNumber` should be right. 
+        - The `InodeBlocks` should equal `Ceil(0.1 * Blocks)`. 
+        - The `Inodes` should equal `InodeBlocks * INODES_PER_BLOCK`. 
       - How will you record that you mounted a disk?
+        - Call `Disk::mount` which will update the `Disk::Mounts` attribute. 
       - How will you determine which blocks are free?
-
-
+        - I will build a bit map using `std::vector`, where contains `Blocks` of int values, each one of which represents whether a block is free or occupied. In my design, there are two const int values defined in `fs.h`: `FREE = 1`, `OCCUPIED = 0`. 
+        - Go through the inode blocks, together with the indirect blocks defined within them, to mark the corresponding element in bit map for each one of the used data block. 
+        - The work is done by `initialize_free_blocks()`. 
 
 4. To implement `FileSystem::create`, you will need to locate a free inode and save a new inode into the inode table.
 
