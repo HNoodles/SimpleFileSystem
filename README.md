@@ -49,14 +49,13 @@ Design
       - How will you locate a free inode?
         - This is a relatively basic operation which only calls for a double loop to go through every inode block of a disk then every inode of an inode block. The program doesn't pursue performance, so we can simply do a linear scan and record the first invalid inode we find which would be the free inode we are looking for. 
         - If no empty inode was found, -1 should be returned. 
-        - This work is done by `FileSystem::allocate_free_block` suggested by the document. 
       - What information would you see in a new inode?
         - The new inode should hava `Valid = 1`, `Size = 0`, `Direct[0 ~ (POINTERS_PER_INODE - 1)] = 0` and `Indirect = 0`. 
       - How will you record this new inode?
         - I implemented `FileSystem::save_inode` as instructed. The function should compute the block index and inode index according to the `inumber` passed in. 
         - Then, it should read in the corresponding block and modify the selected inode. 
         - Finally, it should write the whole block back onto the disk. 
-
+      
 5. To implement `FileSystem::remove`, you will need to locate the inode and then free its associated blocks.
 
       - How will you determine if the specified inode is valid?
