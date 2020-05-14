@@ -50,6 +50,7 @@ private:
     Disk                *disk;
     size_t              blocks;
     size_t              inodeBlocks;
+    size_t              inodes;
     std::vector<int>    bitMap; 
 
     // 1 means block is free, 0 means block occupied

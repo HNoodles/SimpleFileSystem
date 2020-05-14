@@ -108,6 +108,7 @@ bool FileSystem::mount(Disk *disk) {
     this->disk = disk;
     this->blocks = superBlock.Super.Blocks;
     this->inodeBlocks = superBlock.Super.InodeBlocks;
+    this->inodes = superBlock.Super.Inodes;
 
     // Allocate free block bitmap
     initialize_free_blocks();
@@ -143,7 +144,15 @@ ssize_t FileSystem::create() {
             break;
         }
     }
-
+    // loop over inodes
+    // Inode inode;
+    // size_t i;
+    // for (i = 0; i < inodes; i++) {
+    //     // find an invalid node 
+    //     if (!load_inode(i, &inode)) 
+    //         break;
+    // }
+    
     // not found, create failed
     if (inumber == -1)
         return inumber;
@@ -168,12 +177,29 @@ ssize_t FileSystem::create() {
 
 bool FileSystem::remove(size_t inumber) {
     // Load inode information
+    Inode inode;
+    if (!load_inode(inumber, &inode))
+        // invalid inode to remove
+        return false;
 
     // Free direct blocks
+    for (size_t i = 0; i < POINTERS_PER_INODE; i++) {
+        bitMap[inode.Direct[i]] = FREE;
+    }
 
-    // Free indirect blocks
+    // Free indirect blocks if there are
+    if (inode.Indirect) {
+        Block indirect;
+        disk->read(inode.Indirect, indirect.Data);
+        for (size_t i = 0; i < POINTERS_PER_BLOCK; i++) {
+            bitMap[indirect.Pointers[i]] = FREE;
+        }
+    }
 
     // Clear inode in inode table
+    inode.Valid = 0;
+    save_inode(inumber, &inode);
+
     return true;
 }
 
@@ -245,9 +271,23 @@ void FileSystem::initialize_free_blocks() {
     }
 }
 
+bool FileSystem::load_inode(size_t inumber, Inode *node) {
+    size_t blockIndex = inumber / INODES_PER_BLOCK + 1;
+    size_t pointerIndex = inumber % INODES_PER_BLOCK;
+
+    // read the whole block
+    Block block;
+    disk->read(blockIndex, block.Data);
+
+    // read the inode
+    *node = block.Inodes[pointerIndex];
+
+    return node->Valid;
+}
+
 bool FileSystem::save_inode(size_t inumber, Inode *node) {
-    uint32_t blockIndex = inumber / INODES_PER_BLOCK + 1;
-    uint32_t pointerIndex = inumber % INODES_PER_BLOCK;
+    size_t blockIndex = inumber / INODES_PER_BLOCK + 1;
+    size_t pointerIndex = inumber % INODES_PER_BLOCK;
 
     // read the whole block
     Block block;
