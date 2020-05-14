@@ -118,10 +118,54 @@ bool FileSystem::mount(Disk *disk) {
 // Create inode ----------------------------------------------------------------
 
 ssize_t FileSystem::create() {
+    // // the disk should first be mounted
+    // if (!disk->mounted())
+    //     return -1;
+
     // Locate free inode in inode table
+    // Read Inode blocks
+    Block inodeBlock;
+    Inode inode;
+    // loop over inode blocks to find an empty inode
+    ssize_t inumber = -1;
+    for (size_t i = 0; i < inodeBlocks; i++) {
+        // read in one inode block
+        disk->read(i + 1, inodeBlock.Data);
+
+        // loop over inodes in the block
+        for (size_t j = 0; j < INODES_PER_BLOCK; j++) {
+            inode = inodeBlock.Inodes[j];
+            // find invalid inode
+            if (!inode.Valid) {
+                inumber = i * INODES_PER_BLOCK + j;
+                break;
+            }
+        }
+
+        // break if already found an empty inode
+        if (inumber != -1) {
+            break;
+        }
+    }
+
+    // not found, create failed
+    if (inumber == -1)
+        return inumber;
+
+    // found, set valid bit and size
+    inode.Valid = 1;
+    inode.Size = 0;
+    // set direct and indirect
+    for (size_t k = 0; k < POINTERS_PER_INODE; k++) {
+        inode.Direct[k] = 0;
+    }
+    inode.Indirect = 0;
+
+    // write inode onto disk
+    save_inode(inumber, &inode);
 
     // Record inode if found
-    return 0;
+    return inumber;
 }
 
 // Remove inode ----------------------------------------------------------------
@@ -203,6 +247,23 @@ void FileSystem::initialize_free_blocks() {
             }
         }
     }
+}
+
+bool FileSystem::save_inode(size_t inumber, Inode *node) {
+    uint32_t blockNum = inumber / INODES_PER_BLOCK + 1;
+    uint32_t pointer = inumber % INODES_PER_BLOCK;
+
+    // read the whole block
+    Block block;
+    disk->read(blockNum, block.Data);
+
+    // modify the inode
+    block.Inodes[pointer] = *node;
+
+    // write back
+    disk->write(blockNum, block.Data);
+
+    return true;
 }
 
 void FileSystem::readArray(uint32_t array[], size_t size, std::string* string) {
