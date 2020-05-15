@@ -79,11 +79,19 @@ Design
 7. To implement `FileSystem::read`, you will need to locate the inode and copy data from appropriate blocks to the user-specified data buffer.
 
       - How will you determine if the specified inode is valid?
+        - Again, use `load_inode` and make sure that `inode.Valid == 1`. 
       - How will you determine which block to read from?
+        - For me, the data blocks related to an inode can be seen sequentially, although they may come from direct or indirect pointers. 
+        - From the offset, we can tell how many blocks are completely skipped and how many bytes still need to be skipped in the next block to come. When looping over the sequence of data blocks, the first few of valid blocks will be skipped, and the skip count will be updated, until it comes to the first valid block to be read (when skip count is decreased from `offset / disk->BLOCK_SIZE` to `0`). 
+        - From the length, we can know how many bytes of data we need to read in total. In my implementation, I will loop over the sequence of data blocks related to the inode. Each time I read a data block, I will read `min(disk->BLOCK_SIZE, remaining_length)` bytes of data in case that too many bytes of data is read than needed. After reading, I will update the remaining length to read by `remaining_length -= bytes_read` and turn to scan next data block until `remaining_length == 0`.  
       - How will you handle the offset?
+        - The offset mainly gives me two pieces of information. 
+          1. It determines the number of blocks to skip and the remainder bytes to skip in the first block to be read as mentioned above. 
+          2. `min(length, inode.Size - offset)` gives me the actual bytes needed to be read to avoid reading too many bytes which may be out of the scope of the indicated inode. 
       - How will you copy from a block to the data buffer?
-
-
+        - For a specific block's data copy, I will utilize `memcpy`. From `offset` and `remaining_length`, I can know how many bytes of data to copy and which byte to start as described above. 
+        - The only thing left to be determined is where should the data be written to in `char *data`. So I keep a variable `size` to record how many bytes of data I have already copied. Then, the destination offset would be `size`. 
+        - After finishing copy, `size` can be used to indicate how many bytes of data were copied. 
 
 8. To implement `FileSystem::write`, you will need to locate the inode and copy data the user-specified data buffer to data blocks in the file system.
 

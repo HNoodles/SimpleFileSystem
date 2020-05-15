@@ -224,44 +224,8 @@ ssize_t FileSystem::read(size_t inumber, char *data, size_t length, size_t offse
         return size;
 
     // Read block and copy to data
-    // skip the first few blocks
     size_t skipBlocks = offset / disk->BLOCK_SIZE;
     size_t remainder = offset % disk->BLOCK_SIZE;
-
-    // // block for reading data
-    // Block block;
-    
-    // // start from direct blocks
-    // for (size_t i = 0; i < POINTERS_PER_INODE; i++) {
-    //     // skip invalid blocks
-    //     if (!inode.Direct[i])
-    //         continue;
-            
-    //     // skip blocks if needed
-    //     if (skipBlocks > 0) {
-    //         skipBlocks--;
-    //         continue;
-    //     }
-
-    //     disk->read(inode.Direct[i], block.Data);
-
-    //     // determine how long to read
-    //     size_t bytesToRead = std::min(disk->BLOCK_SIZE - remainder, rlength);
-
-    //     // skip remainder if there is, only first block will have remainder
-    //     memcpy(data + size, block.Data + remainder, bytesToRead);
-    //     size += bytesToRead;
-
-    //     // mark that one data block has been read
-    //     rlength -= bytesToRead;
-        
-    //     if (remainder != 0)
-    //         remainder = 0;
-
-    //     // return when read completed
-    //     if (rlength == 0)
-    //         return size;
-    // }
 
     if (readArray(inode.Direct, POINTERS_PER_INODE, &size, 
     &skipBlocks, &remainder, &rlength, data))
@@ -277,36 +241,7 @@ ssize_t FileSystem::read(size_t inumber, char *data, size_t length, size_t offse
     // read in indirect block
     Block indirect;
     disk->read(inode.Indirect, indirect.Data);
-    // for (size_t i = 0; i < POINTERS_PER_BLOCK; i++) {
-    //     // skip invalid blocks
-    //     if (!indirect.Pointers[i])
-    //         continue;
-
-    //     // skip blocks if needed
-    //     if (skipBlocks > 0) {
-    //         skipBlocks--;
-    //         continue;
-    //     }
-
-    //     disk->read(indirect.Pointers[i], block.Data);
-
-    //     // determine how long to read
-    //     size_t bytesToRead = std::min(disk->BLOCK_SIZE - remainder, rlength);
-
-    //     // skip remainder if there is, only first block will have remainder
-    //     memcpy(data + size, block.Data + remainder, bytesToRead);
-    //     size += bytesToRead;
-        
-    //     if (remainder != 0)
-    //         remainder = 0;
-
-    //     // mark that one data block has been read
-    //     rlength -= bytesToRead;
-
-    //     // return when read completed
-    //     if (rlength == 0)
-    //         return size;
-    // }
+    
     if (readArray(indirect.Pointers, POINTERS_PER_BLOCK, &size, 
     &skipBlocks, &remainder, &rlength, data))
         // if read finished
@@ -419,7 +354,7 @@ size_t *skipBlocks, size_t *remainder, size_t *rlength, char *data) {
     // start from direct blocks
     for (size_t i = 0; i < arraySize; i++) {
         // skip invalid blocks
-        if (!array[i])
+        if (array[i] == 0)
             continue;
             
         // skip blocks if needed
