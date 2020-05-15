@@ -40,7 +40,7 @@ void FileSystem::debug(Disk *disk) {
             
             // loop over direct blocks
             std::string directBlocks = "";
-            readArray(inode.Direct, POINTERS_PER_INODE, &directBlocks);
+            debugArray(inode.Direct, POINTERS_PER_INODE, &directBlocks);
             printf("Inode %zu:\n"            , j);
             printf("    size: %u bytes\n"   , inode.Size);
             printf("    direct blocks:%s\n" , directBlocks.c_str());
@@ -53,7 +53,7 @@ void FileSystem::debug(Disk *disk) {
             Block indirect;
             disk->read(inode.Indirect, indirect.Data);
             std::string indirectBlocks = "";
-            readArray(indirect.Pointers, POINTERS_PER_BLOCK, &indirectBlocks);
+            debugArray(indirect.Pointers, POINTERS_PER_BLOCK, &indirectBlocks);
             printf("    indirect block: %u\n"       , inode.Indirect);
             printf("    indirect data blocks:%s\n"  , indirectBlocks.c_str());
         }
@@ -209,11 +209,111 @@ ssize_t FileSystem::stat(size_t inumber) {
 
 ssize_t FileSystem::read(size_t inumber, char *data, size_t length, size_t offset) {
     // Load inode information
+    Inode inode;
+    if (!load_inode(inumber, &inode)) {
+        // invalid inode to remove
+        return -1;
+    }
 
-    // Adjust length
+    // Adjust length, length shouldn't be larger than the data remaining
+    size_t rlength = std::min(length, inode.Size - offset);
+    size_t size = 0;
+
+    // return when there is nothing to read
+    if (rlength == 0)
+        return size;
 
     // Read block and copy to data
-    return 0;
+    // skip the first few blocks
+    size_t skipBlocks = offset / disk->BLOCK_SIZE;
+    size_t remainder = offset % disk->BLOCK_SIZE;
+
+    // // block for reading data
+    // Block block;
+    
+    // // start from direct blocks
+    // for (size_t i = 0; i < POINTERS_PER_INODE; i++) {
+    //     // skip invalid blocks
+    //     if (!inode.Direct[i])
+    //         continue;
+            
+    //     // skip blocks if needed
+    //     if (skipBlocks > 0) {
+    //         skipBlocks--;
+    //         continue;
+    //     }
+
+    //     disk->read(inode.Direct[i], block.Data);
+
+    //     // determine how long to read
+    //     size_t bytesToRead = std::min(disk->BLOCK_SIZE - remainder, rlength);
+
+    //     // skip remainder if there is, only first block will have remainder
+    //     memcpy(data + size, block.Data + remainder, bytesToRead);
+    //     size += bytesToRead;
+
+    //     // mark that one data block has been read
+    //     rlength -= bytesToRead;
+        
+    //     if (remainder != 0)
+    //         remainder = 0;
+
+    //     // return when read completed
+    //     if (rlength == 0)
+    //         return size;
+    // }
+
+    if (readArray(inode.Direct, POINTERS_PER_INODE, &size, 
+    &skipBlocks, &remainder, &rlength, data))
+        // if read finished
+        return size;
+    
+    // indirect block needs to be read
+    // if there is no indirect block
+    if (!inode.Indirect) {
+        return -1;
+    }
+
+    // read in indirect block
+    Block indirect;
+    disk->read(inode.Indirect, indirect.Data);
+    // for (size_t i = 0; i < POINTERS_PER_BLOCK; i++) {
+    //     // skip invalid blocks
+    //     if (!indirect.Pointers[i])
+    //         continue;
+
+    //     // skip blocks if needed
+    //     if (skipBlocks > 0) {
+    //         skipBlocks--;
+    //         continue;
+    //     }
+
+    //     disk->read(indirect.Pointers[i], block.Data);
+
+    //     // determine how long to read
+    //     size_t bytesToRead = std::min(disk->BLOCK_SIZE - remainder, rlength);
+
+    //     // skip remainder if there is, only first block will have remainder
+    //     memcpy(data + size, block.Data + remainder, bytesToRead);
+    //     size += bytesToRead;
+        
+    //     if (remainder != 0)
+    //         remainder = 0;
+
+    //     // mark that one data block has been read
+    //     rlength -= bytesToRead;
+
+    //     // return when read completed
+    //     if (rlength == 0)
+    //         return size;
+    // }
+    if (readArray(indirect.Pointers, POINTERS_PER_BLOCK, &size, 
+    &skipBlocks, &remainder, &rlength, data))
+        // if read finished
+        return size;
+
+    // still have bytes unread, something wrong
+    return -1;
 }
 
 // Write to inode --------------------------------------------------------------
@@ -302,11 +402,52 @@ bool FileSystem::save_inode(size_t inumber, Inode *node) {
     return true;
 }
 
-void FileSystem::readArray(uint32_t array[], size_t size, std::string* string) {
-    for (size_t i = 0; i < size; i++) {
+void FileSystem::debugArray(uint32_t array[], size_t arraySize, std::string* string) {
+    for (size_t i = 0; i < arraySize; i++) {
         if (array[i]) {// if is 0, means null
             *string += " ";
             *string += std::to_string(array[i]);
         }
     }
+}
+
+bool FileSystem::readArray(uint32_t array[], size_t arraySize, size_t *size, 
+size_t *skipBlocks, size_t *remainder, size_t *rlength, char *data) {
+    // block for reading data
+    Block block;
+    
+    // start from direct blocks
+    for (size_t i = 0; i < arraySize; i++) {
+        // skip invalid blocks
+        if (!array[i])
+            continue;
+            
+        // skip blocks if needed
+        if ((*skipBlocks) > 0) {
+            (*skipBlocks)--;
+            continue;
+        }
+
+        disk->read(array[i], block.Data);
+
+        // determine how long to read
+        size_t bytesToRead = std::min(disk->BLOCK_SIZE - (*remainder), (*rlength));
+
+        // skip remainder if there is, only first block will have remainder
+        memcpy(data + (*size), block.Data + (*remainder), bytesToRead);
+        (*size) += bytesToRead;
+
+        // mark that one data block has been read
+        (*rlength) -= bytesToRead;
+        
+        if ((*remainder) != 0)
+            (*remainder) = 0;
+
+        // return when read completed
+        if ((*rlength) == 0)
+            return true;
+    }
+
+    // means that still needs further reading
+    return false;
 }

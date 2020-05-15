@@ -44,7 +44,8 @@ private:
     bool load_inode(size_t inumber, Inode *node);
     bool save_inode(size_t inumber, Inode *node);
 
-    static void readArray(uint32_t array[], size_t size, std::string* string);
+    static void debugArray(uint32_t array[], size_t arraySize, std::string* string);
+    bool readArray(uint32_t array[], size_t arraySize, size_t *size, size_t *skipBlocks, size_t *remainder, size_t *rlength, char *data);
 
     // Internal member variables
     Disk                *disk;
