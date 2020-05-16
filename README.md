@@ -26,9 +26,9 @@ Design
            - `Disk::mounted` must be false, otherwise, do nothing and return false.  
       - What information must be written into the superblock?
            - According to the definition of superblock, we should construct a union `Block` and give it a `MagicNumber = MAGIC_NUMBER`, a `Blocks = disk->size()`, a `InodeBlocks` which is rounded from 10% of `Blocks` and `Inodes = InodeBlocks * INODES_PER_BLOCK`.  
-           - One thing to mention is that before we set the fields in `SuperBLock`, we should first use `memset` to set all the bits in the block to 0 because the four fields in `SuperBlock` only occupy 16 bytes instead of 4096. 
+           - One thing to mention is that before we set the fields in `SuperBLock`, we should first use `memset` to set all the bits in the block to 0 because the four fields in `SuperBlock` **only occupy 16 bytes instead of 4096**. 
       - How would you clear all the remaining blocks?
-     - To utilize the `Disk::write` function, we can use a loop from the second block to the last one to clear each of the remaining blocks one by one. For each block, we can write out a block filled with `0`, created using `memset` function. 
+          - To utilize the `Disk::write` function, we can use a loop from the second block to the last one to clear each of the remaining blocks one by one. For each block, we can write a block filled with `0`, created using `memset` function. 
      
 3. To implement `FileSystem::mount`, you will need to prepare a filesystem for use by reading the superblock and allocating the free block bitmap.
 
@@ -44,7 +44,7 @@ Design
         - I will build a bit map using `std::vector`, where contains `Blocks` of int values, each one of which represents whether a block is free or occupied. In my design, there are two const int values defined in `fs.h`: `FREE = 1`, `OCCUPIED = 0`. 
         - The super block and inode blocks are `OCCUPIED`. 
         - Go through the inode blocks, compute how many data blocks needs to be occupied to store the `inode.Size` of data. Then, go through the direct and indirect (if needed) blocks and mark `Ceil(inode.Size / disk->BLOCK_SIZE)` blocks to be `OCCUPIED`. 
-        - If there is a indirect block, it should also be marked as `OCCUPIED`.  
+        - **If there is a indirect block, it should also be marked as `OCCUPIED`.**  
         - The work is done by `initialize_free_blocks()`. 
 
 4. To implement `FileSystem::create`, you will need to locate a free inode and save a new inode into the inode table.
@@ -53,12 +53,17 @@ Design
         - This is a relatively basic operation which only calls for a double loop to go through every inode block of a disk then every inode of an inode block. The program doesn't pursue performance, so we can simply do a linear scan and record the first invalid inode we find which would be the free inode we are looking for. 
         - If no empty inode was found, -1 should be returned. 
       - What information would you see in a new inode?
+        
         - The new inode should hava `Valid = 1`, `Size = 0`, `Direct[0 ~ (POINTERS_PER_INODE - 1)] = 0` and `Indirect = 0`. 
       - How will you record this new inode?
         - I implemented `FileSystem::save_inode` as instructed. The function should compute the block index and inode index according to the `inumber` passed in. 
-        - Then, it should read in the corresponding block and modify the selected inode. 
+
+        - Then, it should ~~read in the corresponding block and~~ modify the selected inode. 
+
+          > In improved version, it doesn't need to read the block again, instead, the block will be passed in as a parameter. 
+
         - Finally, it should write the whole block back onto the disk. 
-      
+
 5. To implement `FileSystem::remove`, you will need to locate the inode and then free its associated blocks.
 
       - How will you determine if the specified inode is valid?
@@ -69,7 +74,7 @@ Design
       - How will you free the indirect blocks?
         - This work is just like freeing direct blocks except that we should make sure that the inode does have indirect blocks by examining `inode.Indirect != 0`. 
       - How will you update the inode table?
-        - The only value needs to be changed is `inode.Valid` according to the lazy strategy. After setting `Valid = 0`, just call `save_inode` to write the inode back to disk. 
+        - The only value needs to be changed is `inode.Valid` due to the lazy strategy. After setting `Valid = 0`, just call `save_inode` to write the inode back to disk. 
 
 6. To implement `FileSystem::stat`, you will need to locate the inode and return its size.
    
@@ -85,8 +90,8 @@ Design
         - Again, use `load_inode` and make sure that `inode.Valid == 1`. 
       - How will you determine which block to read from?
         - For me, the data blocks related to an inode can be seen sequentially, although they may come from direct or indirect pointers. 
-        - From the offset, we can tell how many blocks are completely skipped and how many bytes still need to be skipped in the next block to come. When looping over the sequence of data blocks, the first few of blocks will be skipped, and the skip count will be updated, until it comes to the first valid block to be read (when skip count is decreased from `offset / disk->BLOCK_SIZE` to `0`). 
-        - From the length, we can know how many bytes of data we need to read in total. In my implementation, I will loop over the sequence of data blocks related to the inode. Each time I read a data block, I will read `min(disk->BLOCK_SIZE, rlength)` bytes of data, where `rlength` is the remaining length to read,  in case that too many bytes of data is read than needed. After reading, I will update the remaining length to read by `rlength -= bytes_read` and turn to scan next data block until `rlength == 0`.  
+        - From the `offset`, we can tell how many blocks are completely skipped (`skipBlocks`) and how many bytes still need to be skipped (`remainder`) in the next block to come. When looping over the sequence of data blocks, the first few of blocks will be skipped, and the skip count will be updated, until it comes to the first valid block to be read (when skip count is decreased from `offset / disk->BLOCK_SIZE` to `0`). 
+        - From the `length`, we can know how many bytes of data we need to read in total. In my implementation, I will loop over the sequence of data blocks related to the inode. Each time I read a data block, I will read `min(disk->BLOCK_SIZE, rlength)` bytes of data, where `rlength` is the remaining length to read,  in case that too many bytes of data is read than needed. After reading, I will update the remaining length to read by `rlength -= bytes_read` and turn to scan next data block until `rlength == 0`.  
       - How will you handle the offset?
         - The offset mainly gives me two pieces of information. 
           1. It determines the number of blocks to skip and the remainder bytes to skip in the first block to be read as mentioned above. 
@@ -108,7 +113,7 @@ Design
         - This work is the same as the one in `read`: `skipBlocks` and `remainder`. 
       - How will you know if you need a new block?
         - When meeting empty blocks during the loop, we can call `allocate_free_block` to get a free block assigned. 
-        - No matter the empty block is in direct array or indirect block. 
+        - It is the same no matter the empty block is in direct array or indirect block. 
       - How will you manage allocating a new block if you need another one?
         - We can simply loop over the `bitMap` vector we maintained and find the first index marked as `FREE`. That block can be the new block. 
         - Before returning the index, the element should be set to `OCCUPIED`. 
@@ -129,8 +134,6 @@ Design
 
 The test result is shown below. The failed tests are all caused by **performance incoherence**. In all the cases, my implementation has **better** performance than the test requires. 
 
-Let's walk through those "failures" one by one. 
-
 > hnoodles@hnoodles-UX410UQK:~/17302010002/OperatingSystemI/SimpleFileSystem$ make test
 >
 > g++ -g -gdwarf-2 -std=gnu++11 -Wall -Iinclude -fPIC -c -o src/library/fs.o src/library/fs.cpp
@@ -141,7 +144,7 @@ Let's walk through those "failures" one by one.
 >
 > Testing cat on data/image.5 ... Success
 >
-> Testing cat on data/image.20 ... Failure
+> Testing cat on data/image.20 ... **Failure**
 >
 > --- /dev/fd/63  2020-05-16 22:20:04.810435945 +0800
 >
@@ -179,7 +182,7 @@ Let's walk through those "failures" one by one.
 >
 > Testing create in data/image.5.create ... Files /dev/fd/63 and /dev/fd/62 differ
 >
-> False
+> **False**
 >
 > Testing debug on data/image.5 ... Success
 >
@@ -209,7 +212,7 @@ Let's walk through those "failures" one by one.
 >
 > Testing bad-mount on /tmp/tmp.3dZos4qHQG/image.5 ... Success
 >
-> Testing remove in /tmp/tmp.ry27gDmNee/image.5 ... False
+> Testing remove in /tmp/tmp.ry27gDmNee/image.5 ... **False**
 >
 > --- /dev/fd/63  2020-05-16 22:20:05.022429932 +0800
 >
@@ -229,7 +232,7 @@ Let's walk through those "failures" one by one.
 >
 >  8 disk block writes
 >
-> Testing remove in /tmp/tmp.ry27gDmNee/image.5 ... False
+> Testing remove in /tmp/tmp.ry27gDmNee/image.5 ... **False**
 >
 > --- /dev/fd/63  2020-05-16 22:20:05.030429705 +0800
 >
@@ -249,7 +252,7 @@ Let's walk through those "failures" one by one.
 >
 >  10 disk block writes
 >
-> Testing remove in /tmp/tmp.ry27gDmNee/image.20 ... False
+> Testing remove in /tmp/tmp.ry27gDmNee/image.20 ... **False**
 >
 > --- /dev/fd/63  2020-05-16 22:20:05.038429478 +0800
 >
@@ -278,6 +281,8 @@ Let's walk through those "failures" one by one.
 > Testing stat on data/image.200 ... Success
 >
 > Testing valgrind on /tmp/tmp.0xOvTFPQph/image.200 ... Success
+
+Let's walk through those "failures" one by one. 
 
 ### Cat on data/image.20
 
@@ -364,16 +369,16 @@ In this section, I will explain the main optimization I have done to improve my 
 
 Besides `size_t inumber` and `Inode *node`, I added two more parameters `Block *block` and `bool needRead` to these two functions. 
 
-The reason why I made the change is that I found that in some cases such as `create`, the inode block has already located, so it's unnecessary to read it from the disk again when save a node. 
+The reason why I made the change is that I found that in some cases such as `create`, the inode block has already been located, so it's unnecessary to read it from the disk again when saving a node. 
 
 Also, in `remove`, we can use the `Block *` to store the inode block we read in `load_inode` and reuse it in `save_inode` to decrease the time of calling `Disk::read`. 
 
 ### 2. Allocate_free_block
 
-In common sense, allocating a free block may comes with cleaning it at once (use `memset` to set all its bits to 0). However, it needn't to be like this. Instead, it can be treated in a way like `malloc`, not `calloc`. 
+In common sense, allocating a free block may come with cleaning it at once (use `memset` to set all its bits to 0). However, it doesn't need to be like this. Instead, it can be treated in a way like `malloc`, not `calloc`. 
 
 In some cases, we know that we are going to write a whole block of data to a newly allocated block, where allocating a "clean" block is unnecessary. Actually in those cases, all we care about is that the block is `FREE`. This happens in `write`. 
 
-Even though in some cases, for instance, when we want to allocate a block as indirect block, or when we the new block isn't going to be written wholly, we can still explicitly call `memset` to do the cleaning work on demand. 
+Even though in some cases, for instance, when we want to allocate a block as indirect block, or when the new block isn't going to be written wholly, we can still explicitly call `memset` to do the cleaning work on demand. 
 
 In this way, we can have less `Disk::write` operations. 
