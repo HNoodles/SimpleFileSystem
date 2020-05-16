@@ -308,7 +308,7 @@ ssize_t FileSystem::write(size_t inumber, char *data, size_t length, size_t offs
 
     // if there is no indirect block, allocate one
     if (!inode.Indirect) {
-        ssize_t blockNum = allocate_free_block(false);
+        ssize_t blockNum = allocate_free_block();
 
         // no free block
         if (blockNum == -1)
@@ -401,18 +401,10 @@ void FileSystem::initialize_free_blocks() {
     }
 }
 
-ssize_t FileSystem::allocate_free_block(bool clean) {
+ssize_t FileSystem::allocate_free_block() {
     for (size_t i = 1 + inodeBlocks; i < blocks; i++) {
         if (bitMap[i] == FREE) {
             bitMap[i] = OCCUPIED;
-
-            if (clean) {
-                // set block to all 0
-                Block block;
-                memset(block.Data, 0, disk->BLOCK_SIZE);
-                disk->write(i, block.Data);
-            }
-
             return i;
         }
     }
@@ -519,20 +511,25 @@ size_t *skipBlocks, size_t *remainder, size_t *rlength, char *data) {
         if (array[i] == 0) {
             // only need to clean the new allocated block when we write 
             // partial of the block
-            ssize_t blockNum = allocate_free_block(writingPartialBlock);
+            ssize_t blockNum = allocate_free_block();
             
             // no free block
             if (blockNum == -1)
                 return -1;
             
             array[i] = blockNum;
+
+            // clear the offset bits
+            if (writingPartialBlock)
+                memset(block.Data, 0, *remainder);
         }
 
         // should read in the block only when we write part of the block
         // otherwise, we don't care what was in the block
-        if (writingPartialBlock)
+        if (writingPartialBlock) {
             disk->read(array[i], block.Data);
-
+        }
+        
         // skip remainder if there is, only first block will have remainder
         memcpy(block.Data + (*remainder), data + (*size), bytesToWrite);
         (*size) += bytesToWrite;

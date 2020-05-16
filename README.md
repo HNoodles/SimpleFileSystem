@@ -29,7 +29,7 @@ Design
            - One thing to mention is that before we set the fields in `SuperBLock`, we should first use `memset` to set all the bits in the block to 0 because the four fields in `SuperBlock` only occupy 16 bytes instead of 4096. 
       - How would you clear all the remaining blocks?
      - To utilize the `Disk::write` function, we can use a loop from the second block to the last one to clear each of the remaining blocks one by one. For each block, we can write out a block filled with `0`, created using `memset` function. 
-      
+     
 3. To implement `FileSystem::mount`, you will need to prepare a filesystem for use by reading the superblock and allocating the free block bitmap.
 
       - What pre-condition must be true before this operation can succeed?
@@ -123,12 +123,166 @@ Design
         - The `Direct` array is changed during write process. When it is before writing, `Direct` is surely ready. 
         - The `Indirect` is the same as `Direct`. 
 
-Errata
-------
 
-1. 
 
-Extra Credit
+## Test Result
+
+The test result is shown below. The failed tests are all caused by **performance incoherence**. In all the cases, my implementation has **better** performance than the test requires. 
+
+Let's walk through those "failures" one by one. 
+
+> hnoodles@hnoodles-UX410UQK:~/17302010002/OperatingSystemI/SimpleFileSystem$ make test
+> g++ -g -gdwarf-2 -std=gnu++11 -Wall -Iinclude -fPIC -c -o src/library/fs.o src/library/fs.cpp
+> ar rcs lib/libsfs.a src/library/disk.o src/library/fs.o
+> g++ -Llib -o bin/sfssh src/shell/sfssh.o -lsfs
+> Testing cat on data/image.5 ... Success
+> Testing cat on data/image.20 ... Failure
+> --- /dev/fd/63  2020-05-16 22:20:04.810435945 +0800
+> +++ /dev/fd/62  2020-05-16 22:20:04.810435945 +0800
+> @@ -143,7 +143,7 @@
+>
+>  0 bytes copied
+>  0 disk block writes
+> -20 disk block reads
+> +21 disk block reads
+>  27160 bytes copied
+>  9546 bytes copied
+>      Abraham Clark
+> Testing copyin in /tmp/tmp.xoaZh20yYg/image.5 ... Success
+> Testing copyin in /tmp/tmp.xoaZh20yYg/image.20 ... Success
+> Testing copyin in /tmp/tmp.xoaZh20yYg/image.200 ... Success
+> Testing copyout in data/image.5 ... Success
+> Testing copyout in data/image.20 ... Success
+> Testing copyout in data/image.200 ... Success
+> Testing create in data/image.5.create ... Files /dev/fd/63 and /dev/fd/62 differ
+> False
+> Testing debug on data/image.5 ... Success
+> Testing debug on data/image.20 ... Success
+> Testing debug on data/image.200 ... Success
+> Testing format on data/image.5.formatted ... Success
+> Testing format on data/image.20.formatted ... Success
+> Testing format on data/image.200.formatted ... Success
+> Testing mount on data/image.5 ... Success
+> Testing mount-mount on data/image.5 ... Success
+> Testing mount-format on data/image.5 ... Success
+> Testing bad-mount on /tmp/tmp.3dZos4qHQG/image.5 ... Success
+> Testing bad-mount on /tmp/tmp.3dZos4qHQG/image.5 ... Success
+> Testing bad-mount on /tmp/tmp.3dZos4qHQG/image.5 ... Success
+> Testing bad-mount on /tmp/tmp.3dZos4qHQG/image.5 ... Success
+> Testing bad-mount on /tmp/tmp.3dZos4qHQG/image.5 ... Success
+> Testing remove in /tmp/tmp.ry27gDmNee/image.5 ... False
+> --- /dev/fd/63  2020-05-16 22:20:05.022429932 +0800
+> +++ /dev/fd/62  2020-05-16 22:20:05.022429932 +0800
+> @@ -38,5 +38,5 @@
+>  Inode 2:
+>        size: 0 bytes
+>        direct blocks:
+> -17 disk block reads
+> +25 disk block reads
+>  8 disk block writes
+> Testing remove in /tmp/tmp.ry27gDmNee/image.5 ... False
+> --- /dev/fd/63  2020-05-16 22:20:05.030429705 +0800
+> +++ /dev/fd/62  2020-05-16 22:20:05.030429705 +0800
+> @@ -54,5 +54,5 @@
+>  Inode 2:
+>        size: 965 bytes
+>        direct blocks: 4
+> -23 disk block reads
+> +27 disk block reads
+>  10 disk block writes
+> Testing remove in /tmp/tmp.ry27gDmNee/image.20 ... False
+> --- /dev/fd/63  2020-05-16 22:20:05.038429478 +0800
+> +++ /dev/fd/62  2020-05-16 22:20:05.038429478 +0800
+> @@ -41,5 +41,5 @@
+>      direct blocks: 4 5 6 7 8
+>        indirect block: 9
+>        indirect data blocks: 13 14
+>   -31 disk block reads
+> -11 disk block writes
+> +41 disk block reads
+> +18 disk block writes
+> Testing stat on data/image.5 ... Success
+> Testing stat on data/image.20 ... Success
+> Testing stat on data/image.200 ... Success
+> Testing valgrind on /tmp/tmp.0xOvTFPQph/image.200 ... Success
+
+### Cat on data/image.20
+
+This one is because my implementation used less reads. 
+
+> ...
+> -20 disk block reads
+> +21 disk block reads
+> ...
+
+### Create in data/image.5.create
+
+This one only gives me a `False` with no more information. Thus I modified the test shell code to seek more details. Here is the actual result. 
+
+> Testing create in data/image.5.create ... False
+> --- /dev/fd/63  2020-05-16 18:03:27.829294066 +0800
+> +++ /dev/fd/62  2020-05-16 18:03:27.829294066 +0800
+> @@ -524,5 +524,5 @@
+>  Inode 127:
+>      size: 0 bytes
+>      direct blocks:
+> -134 disk block reads
+> +261 disk block reads
+>  127 disk block writes
+
+You can see that this is also because my implementation has better read performance. 
+
+### Remove in /tmp/tmp.ry27gDmNee/image.5
+
+1. Again, mine have better read performance. 
+
+   > ...
+   >
+   > -17 disk block reads
+   > +25 disk block reads
+   >
+   > ...
+
+2. Same as above. 
+
+   > ...
+   >
+   > -23 disk block reads
+   > +27 disk block reads
+   > 
+   > ...
+
+### Remove in /tmp/tmp.ry27gDmNee/image.20
+
+In this case, my implementation is better in both read and write. 
+
+> ...
+> -31 disk block reads
+> -11 disk block writes
+> +41 disk block reads
+> +18 disk block writes
+
+
+
+Bonus
 ------------
 
-> Describe what extra credit (if any) that you implemented.
+In this section, I will explain the main optimization I have done to improve my performance(, though it's not requested). 
+
+### 1. Load_inode & Save_inode
+
+Besides `size_t inumber` and `Inode *node`, I added two more parameters `Block *block` and `bool needRead` to these two functions. 
+
+The reason why I made the change is that I found that in some cases such as `create`, the inode block has already located, so it's unnecessary to read it from the disk again when save a node. 
+
+Also, in `remove`, we can use the `Block *` to store the inode block we read in `load_inode` and reuse it in `save_inode` to decrease the time of calling `Disk::read`. 
+
+### 2. Allocate_free_block
+
+In common sense, allocating a free block may comes with cleaning it at once (use `memset` to set all its bits to 0). However, it needn't to be like this. Instead, it can be treated in a way like `malloc`, not `calloc`. 
+
+In some cases, we know that we are going to write a whole block of data to a newly allocated block, where allocating a "clean" block is unnecessary. Actually in those cases, all we care about is that the block is `FREE`. This happens in `write`. 
+
+Even though in some cases, for instance, when we want to allocate a block as indirect block, or when we the new block isn't going to be written wholly, we can still explicitly call `memset` to do the cleaning work on demand. 
+
+In this way, we can have less `Disk::write` operations. 
