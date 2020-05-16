@@ -99,17 +99,34 @@ Design
 8. To implement `FileSystem::write`, you will need to locate the inode and copy data the user-specified data buffer to data blocks in the file system.
 
       - How will you determine if the specified inode is valid?
+        - Again, use `load_inode` and make sure that `inode.Valid == 1`. 
       - How will you determine which block to write to?
+        - This is similar to `FileSystem::read`, use the relationship between `offset` and `disk->BLOCK_SIZE` so that we can tell how many blocks and another bytes to skip. 
+        - Then, we can loop over the sequence of blocks (direct first, then indirect) until find the first block to write in. 
+        - The write loop should continue until all `length` of bytes are written or there is no free block to allocate or we meet the end of the inode. 
       - How will you handle the offset?
+        - This work is the same as the one in `read`: `skipBlocks` and `remainder`. 
       - How will you know if you need a new block?
+        - When meeting empty blocks during the loop, we can call `allocate_free_block` to get a free block assigned. 
+        - No matter the empty block is in direct array or indirect block. 
       - How will you manage allocating a new block if you need another one?
+        - We can simply loop over the `bitMap` vector we maintained and find the first index marked as `FREE`. That block can be the new block. 
+        - Before returning the index, the element should be set to `OCCUPIED`. 
       - How will you copy from a block to the data buffer?
+        - Similar to `read`, `size` and `bytesToWrite = min(disk->BLOCK_SIZE, rlength)` tell me what place at the `data` pointer to write and how many bytes to write at a time. 
+        - Each time I copy from a block to the data buffer, I use `memcpy` function. 
+        - After finishing copy, the `size` variable would be the total bytes written. 
       - How will you update the inode?
+        - There are three fields that may be changed during the writing process, they are `Size`, `Direct` and `Indirect`. 
+        - I will follow a lazy strategy to minimize the times of calling `Disk::write`, which means I will do all the updating things just before return. 
+        - I have a `size` variable which keeps tracking how many bytes are written. Therefore, `inode.Size += size` is all I need. 
+        - The `Direct` array is changed during write process. When it is before writing, `Direct` is surely ready. 
+        - The `Indirect` is the same as `Direct`. 
 
 Errata
 ------
 
-> Describe any known errors, bugs, or deviations from the requirements.
+1. 
 
 Extra Credit
 ------------

@@ -156,7 +156,7 @@ ssize_t FileSystem::create() {
         inode.Indirect = 0;
 
         // write inode onto disk
-        save_inode(inumber, &inode, &inodeBlock, true);
+        save_inode(inumber, &inode, &inodeBlock, false);
     }
 
     // Record inode, if not found, inumber = -1
@@ -336,11 +336,11 @@ ssize_t FileSystem::write(size_t inumber, char *data, size_t length, size_t offs
             save_inode(inumber, &inode, &inodeBlock, false);
             disk->write(inode.Indirect, indirect.Data);
             return -1;
-        case 1: // still needs reading
+        case 1: // still needs writing
             break;
     }
         
-    // still have bytes unread, something wrong
+    // still have bytes unwritten, something wrong
     // update inode
     inode.Size += size;
     save_inode(inumber, &inode, &inodeBlock, false);
