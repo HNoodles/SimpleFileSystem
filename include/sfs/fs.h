@@ -39,13 +39,15 @@ private:
 
     // Internal helper functions
     void initialize_free_blocks();
-    ssize_t allocate_free_block();
+    ssize_t allocate_free_block(bool clean);
 
-    bool load_inode(size_t inumber, Inode *node);
-    bool save_inode(size_t inumber, Inode *node);
+    bool load_inode(size_t inumber, Inode *node, Block *block, bool needRead);
+    bool save_inode(size_t inumber, Inode *node, Block *block, bool needRead);
 
     static void debugArray(uint32_t array[], size_t arraySize, std::string* string);
-    bool readArray(uint32_t array[], size_t arraySize, size_t *size, size_t *skipBlocks, size_t *remainder, size_t *rlength, char *data);
+    
+    ssize_t readArray(uint32_t array[], size_t arraySize, size_t *size, size_t *skipBlocks, size_t *remainder, size_t *rlength, char *data);
+    ssize_t writeArray(uint32_t array[], size_t arraySize, size_t *size, size_t *skipBlocks, size_t *remainder, size_t *rlength, char *data);
 
     // Internal member variables
     Disk                *disk;

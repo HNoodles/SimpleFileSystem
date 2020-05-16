@@ -69,6 +69,7 @@ bool FileSystem::format(Disk *disk) {
 
     // Write superblock
     Block superBlock;
+    memset(superBlock.Data, 0, disk->BLOCK_SIZE);
     superBlock.Super.MagicNumber = MAGIC_NUMBER;
     superBlock.Super.Blocks = disk->size();
     superBlock.Super.InodeBlocks = 0.1 * disk->size() + 0.5; // 0.5 for rounding
@@ -155,7 +156,7 @@ ssize_t FileSystem::create() {
         inode.Indirect = 0;
 
         // write inode onto disk
-        save_inode(inumber, &inode);
+        save_inode(inumber, &inode, &inodeBlock, true);
     }
 
     // Record inode, if not found, inumber = -1
@@ -166,8 +167,9 @@ ssize_t FileSystem::create() {
 
 bool FileSystem::remove(size_t inumber) {
     // Load inode information
+    Block inodeBlock;
     Inode inode;
-    if (!load_inode(inumber, &inode))
+    if (!load_inode(inumber, &inode, &inodeBlock, true))
         // invalid inode to remove
         return false;
 
@@ -187,7 +189,7 @@ bool FileSystem::remove(size_t inumber) {
 
     // Clear inode in inode table
     inode.Valid = 0;
-    save_inode(inumber, &inode);
+    save_inode(inumber, &inode, &inodeBlock, false);
 
     return true;
 }
@@ -196,8 +198,9 @@ bool FileSystem::remove(size_t inumber) {
 
 ssize_t FileSystem::stat(size_t inumber) {
     // Load inode information
+    Block inodeBlock;
     Inode inode;
-    if (!load_inode(inumber, &inode)) {
+    if (!load_inode(inumber, &inode, &inodeBlock, true)) {
         // invalid inode to remove
         return -1;
     }
@@ -209,8 +212,9 @@ ssize_t FileSystem::stat(size_t inumber) {
 
 ssize_t FileSystem::read(size_t inumber, char *data, size_t length, size_t offset) {
     // Load inode information
+    Block inodeBlock;
     Inode inode;
-    if (!load_inode(inumber, &inode)) {
+    if (!load_inode(inumber, &inode, &inodeBlock, true)) {
         // invalid inode to remove
         return -1;
     }
@@ -227,10 +231,15 @@ ssize_t FileSystem::read(size_t inumber, char *data, size_t length, size_t offse
     size_t skipBlocks = offset / disk->BLOCK_SIZE;
     size_t remainder = offset % disk->BLOCK_SIZE;
 
-    if (readArray(inode.Direct, POINTERS_PER_INODE, &size, 
-    &skipBlocks, &remainder, &rlength, data))
-        // if read finished
-        return size;
+    switch (readArray(inode.Direct, POINTERS_PER_INODE, &size, 
+    &skipBlocks, &remainder, &rlength, data)) {
+        case 0: // if read finished
+            return size;
+        case -1: // error occurred
+            return -1;
+        case 1: // still needs reading
+            break;
+    }
     
     // indirect block needs to be read
     // if there is no indirect block
@@ -242,11 +251,16 @@ ssize_t FileSystem::read(size_t inumber, char *data, size_t length, size_t offse
     Block indirect;
     disk->read(inode.Indirect, indirect.Data);
     
-    if (readArray(indirect.Pointers, POINTERS_PER_BLOCK, &size, 
-    &skipBlocks, &remainder, &rlength, data))
-        // if read finished
-        return size;
-
+    switch (readArray(indirect.Pointers, POINTERS_PER_BLOCK, &size, 
+    &skipBlocks, &remainder, &rlength, data)) {
+        case 0: // if read finished
+            return size;
+        case -1: // error occurred
+            return -1;
+        case 1: // still needs reading
+            break;
+    }
+        
     // still have bytes unread, something wrong
     return -1;
 }
@@ -255,9 +269,83 @@ ssize_t FileSystem::read(size_t inumber, char *data, size_t length, size_t offse
 
 ssize_t FileSystem::write(size_t inumber, char *data, size_t length, size_t offset) {
     // Load inode
+    Block inodeBlock;
+    Inode inode;
+    if (!load_inode(inumber, &inode, &inodeBlock, true)) {
+        // invalid inode to remove
+        return -1;
+    }
+
+    size_t rlength = length;
+    size_t size = 0;
+
+    // return when there is nothing to read
+    if (rlength == 0)
+        return size;
+
+    // Read block and copy to data
+    size_t skipBlocks = offset / disk->BLOCK_SIZE;
+    size_t remainder = offset % disk->BLOCK_SIZE;
+
+    switch (writeArray(inode.Direct, POINTERS_PER_INODE, &size, 
+    &skipBlocks, &remainder, &rlength, data)) {
+        case 0: // if write finished
+            // update inode
+            inode.Size += size;
+            save_inode(inumber, &inode, &inodeBlock, false);
+            return size;
+        case -1: // error occurred
+            // update inode
+            inode.Size += size;
+            save_inode(inumber, &inode, &inodeBlock, false);
+            return -1;
+        case 1: // still needs writing
+            break;
+    }
     
-    // Write block and copy to data
-    return 0;
+    // indirect block needs to be read
+    Block indirect;
+
+    // if there is no indirect block, allocate one
+    if (!inode.Indirect) {
+        ssize_t blockNum = allocate_free_block(false);
+
+        // no free block
+        if (blockNum == -1)
+            return -1;
+        
+        inode.Indirect = blockNum;
+
+        memset(indirect.Data, 0, disk->BLOCK_SIZE);
+    } else {
+        // already have indirect block, read in
+        disk->read(inode.Indirect, indirect.Data);
+    }
+    
+    switch (writeArray(indirect.Pointers, POINTERS_PER_BLOCK, &size, 
+    &skipBlocks, &remainder, &rlength, data)) {
+        case 0: // if write finished
+            // update inode
+            inode.Size += size;
+            save_inode(inumber, &inode, &inodeBlock, false);
+            disk->write(inode.Indirect, indirect.Data);
+            return size;
+        case -1: // error occurred
+            // update inode
+            inode.Size += size;
+            save_inode(inumber, &inode, &inodeBlock, false);
+            disk->write(inode.Indirect, indirect.Data);
+            return -1;
+        case 1: // still needs reading
+            break;
+    }
+        
+    // still have bytes unread, something wrong
+    // update inode
+    inode.Size += size;
+    save_inode(inumber, &inode, &inodeBlock, false);
+    disk->write(inode.Indirect, indirect.Data);
+    return -1;
 }
 
 // Helper functions ------------------------------------------------------------
@@ -272,6 +360,9 @@ void FileSystem::initialize_free_blocks() {
     Block inodeBlock;
     // loop over inode blocks
     for (size_t i = 0; i < inodeBlocks; i++) {
+        // inode blocks are occupied
+        bitMap[i + 1] = OCCUPIED;
+
         // read in one inode block
         disk->read(i + 1, inodeBlock.Data);
 
@@ -283,9 +374,15 @@ void FileSystem::initialize_free_blocks() {
             if (!inode.Valid)
                 continue;
             
+            // // compute how many blocks are needed
+            size_t blockNum = inode.Size / disk->BLOCK_SIZE;
+            if ((inode.Size % disk->BLOCK_SIZE) > 0)
+                blockNum++;
+            
             // loop over direct blocks
-            for (size_t k = 0; k < POINTERS_PER_INODE; k++) {
+            for (size_t k = 0; k < POINTERS_PER_INODE && blockNum > 0; k++) {
                 bitMap[inode.Direct[k]] = OCCUPIED;
+                blockNum--;
             }
 
             // skip invalid indirect node
@@ -295,44 +392,60 @@ void FileSystem::initialize_free_blocks() {
             // loop over indirect blocks
             Block indirect;
             disk->read(inode.Indirect, indirect.Data);
-            for (size_t k = 0; k < POINTERS_PER_BLOCK; k++) {
+            bitMap[inode.Indirect] = OCCUPIED;
+            for (size_t k = 0; k < POINTERS_PER_BLOCK && blockNum > 0; k++) {
                 bitMap[indirect.Pointers[k]] = OCCUPIED;
+                blockNum--;
             }
         }
     }
 }
 
-ssize_t FileSystem::allocate_free_block() {
-    return 0; 
+ssize_t FileSystem::allocate_free_block(bool clean) {
+    for (size_t i = 1 + inodeBlocks; i < blocks; i++) {
+        if (bitMap[i] == FREE) {
+            bitMap[i] = OCCUPIED;
+
+            if (clean) {
+                // set block to all 0
+                Block block;
+                memset(block.Data, 0, disk->BLOCK_SIZE);
+                disk->write(i, block.Data);
+            }
+
+            return i;
+        }
+    }
+    return -1; 
 }
 
-bool FileSystem::load_inode(size_t inumber, Inode *node) {
+bool FileSystem::load_inode(size_t inumber, Inode *node, Block *block, bool needRead) {
     size_t blockIndex = (inumber / INODES_PER_BLOCK) + 1;
     size_t pointerIndex = inumber % INODES_PER_BLOCK;
 
-    // read the whole block
-    Block block;
-    disk->read(blockIndex, block.Data);
+    // read the whole block if needed
+    if (needRead)
+        disk->read(blockIndex, block->Data);
 
     // read the inode
-    *node = block.Inodes[pointerIndex];
+    *node = block->Inodes[pointerIndex];
 
     return node->Valid;
 }
 
-bool FileSystem::save_inode(size_t inumber, Inode *node) {
+bool FileSystem::save_inode(size_t inumber, Inode *node, Block *block, bool needRead) {
     size_t blockIndex = (inumber / INODES_PER_BLOCK) + 1;
     size_t pointerIndex = inumber % INODES_PER_BLOCK;
 
-    // read the whole block
-    Block block;
-    disk->read(blockIndex, block.Data);
+    // read the whole block if needed
+    if (needRead)
+        disk->read(blockIndex, block->Data);
 
     // modify the inode
-    block.Inodes[pointerIndex] = *node;
+    block->Inodes[pointerIndex] = *node;
 
     // write back
-    disk->write(blockIndex, block.Data);
+    disk->write(blockIndex, block->Data);
 
     return true;
 }
@@ -346,23 +459,22 @@ void FileSystem::debugArray(uint32_t array[], size_t arraySize, std::string* str
     }
 }
 
-bool FileSystem::readArray(uint32_t array[], size_t arraySize, size_t *size, 
+ssize_t FileSystem::readArray(uint32_t array[], size_t arraySize, size_t *size, 
 size_t *skipBlocks, size_t *remainder, size_t *rlength, char *data) {
     // block for reading data
     Block block;
     
-    // start from direct blocks
     for (size_t i = 0; i < arraySize; i++) {
-        // skip invalid blocks
-        if (array[i] == 0)
-            continue;
-            
         // skip blocks if needed
         if ((*skipBlocks) > 0) {
             (*skipBlocks)--;
             continue;
         }
 
+        // invalid blocks
+        if (array[i] == 0)
+            return -1;
+            
         disk->read(array[i], block.Data);
 
         // determine how long to read
@@ -380,9 +492,64 @@ size_t *skipBlocks, size_t *remainder, size_t *rlength, char *data) {
 
         // return when read completed
         if ((*rlength) == 0)
-            return true;
+            return 0;
     }
 
     // means that still needs further reading
-    return false;
+    return 1;
+}
+
+ssize_t FileSystem::writeArray(uint32_t array[], size_t arraySize, size_t *size, 
+size_t *skipBlocks, size_t *remainder, size_t *rlength, char *data) {
+    // block for writing data
+    Block block;
+
+    for (size_t i = 0; i < arraySize; i++) {
+        // skip blocks if needed
+        if ((*skipBlocks) > 0) {
+            (*skipBlocks)--;
+            continue;
+        }
+
+        // determine how long to write
+        size_t bytesToWrite = std::min(disk->BLOCK_SIZE - (*remainder), (*rlength));
+        bool writingPartialBlock = bytesToWrite < disk->BLOCK_SIZE;
+
+        // invalid blocks, allocate one
+        if (array[i] == 0) {
+            // only need to clean the new allocated block when we write 
+            // partial of the block
+            ssize_t blockNum = allocate_free_block(writingPartialBlock);
+            
+            // no free block
+            if (blockNum == -1)
+                return -1;
+            
+            array[i] = blockNum;
+        }
+
+        // should read in the block only when we write part of the block
+        // otherwise, we don't care what was in the block
+        if (writingPartialBlock)
+            disk->read(array[i], block.Data);
+
+        // skip remainder if there is, only first block will have remainder
+        memcpy(block.Data + (*remainder), data + (*size), bytesToWrite);
+        (*size) += bytesToWrite;
+
+        disk->write(array[i], block.Data);
+
+        // mark that one data block has been written
+        (*rlength) -= bytesToWrite;
+        
+        if ((*remainder) != 0)
+            (*remainder) = 0;
+
+        // return when write completed
+        if ((*rlength) == 0)
+            return 0;
+    }
+
+    // means that still needs further writing
+    return 1;
 }
