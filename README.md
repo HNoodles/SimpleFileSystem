@@ -132,78 +132,151 @@ The test result is shown below. The failed tests are all caused by **performance
 Let's walk through those "failures" one by one. 
 
 > hnoodles@hnoodles-UX410UQK:~/17302010002/OperatingSystemI/SimpleFileSystem$ make test
+>
 > g++ -g -gdwarf-2 -std=gnu++11 -Wall -Iinclude -fPIC -c -o src/library/fs.o src/library/fs.cpp
+>
 > ar rcs lib/libsfs.a src/library/disk.o src/library/fs.o
+>
 > g++ -Llib -o bin/sfssh src/shell/sfssh.o -lsfs
+>
 > Testing cat on data/image.5 ... Success
+>
 > Testing cat on data/image.20 ... Failure
+>
 > --- /dev/fd/63  2020-05-16 22:20:04.810435945 +0800
+>
 > +++ /dev/fd/62  2020-05-16 22:20:04.810435945 +0800
+>
 > @@ -143,7 +143,7 @@
 >
+> 
+>
 >  0 bytes copied
+>
 >  0 disk block writes
+>
 > -20 disk block reads
+>
 > +21 disk block reads
+>
 >  27160 bytes copied
+>
 >  9546 bytes copied
->      Abraham Clark
+>
+> ​    Abraham Clark
+>
 > Testing copyin in /tmp/tmp.xoaZh20yYg/image.5 ... Success
+>
 > Testing copyin in /tmp/tmp.xoaZh20yYg/image.20 ... Success
+>
 > Testing copyin in /tmp/tmp.xoaZh20yYg/image.200 ... Success
+>
 > Testing copyout in data/image.5 ... Success
+>
 > Testing copyout in data/image.20 ... Success
+>
 > Testing copyout in data/image.200 ... Success
+>
 > Testing create in data/image.5.create ... Files /dev/fd/63 and /dev/fd/62 differ
+>
 > False
+>
 > Testing debug on data/image.5 ... Success
+>
 > Testing debug on data/image.20 ... Success
+>
 > Testing debug on data/image.200 ... Success
+>
 > Testing format on data/image.5.formatted ... Success
+>
 > Testing format on data/image.20.formatted ... Success
+>
 > Testing format on data/image.200.formatted ... Success
+>
 > Testing mount on data/image.5 ... Success
+>
 > Testing mount-mount on data/image.5 ... Success
+>
 > Testing mount-format on data/image.5 ... Success
+>
 > Testing bad-mount on /tmp/tmp.3dZos4qHQG/image.5 ... Success
+>
 > Testing bad-mount on /tmp/tmp.3dZos4qHQG/image.5 ... Success
+>
 > Testing bad-mount on /tmp/tmp.3dZos4qHQG/image.5 ... Success
+>
 > Testing bad-mount on /tmp/tmp.3dZos4qHQG/image.5 ... Success
+>
 > Testing bad-mount on /tmp/tmp.3dZos4qHQG/image.5 ... Success
+>
 > Testing remove in /tmp/tmp.ry27gDmNee/image.5 ... False
+>
 > --- /dev/fd/63  2020-05-16 22:20:05.022429932 +0800
+>
 > +++ /dev/fd/62  2020-05-16 22:20:05.022429932 +0800
+>
 > @@ -38,5 +38,5 @@
+>
 >  Inode 2:
->        size: 0 bytes
->        direct blocks:
+>
+> ​     size: 0 bytes
+>
+> ​     direct blocks:
+>
 > -17 disk block reads
+>
 > +25 disk block reads
+>
 >  8 disk block writes
+>
 > Testing remove in /tmp/tmp.ry27gDmNee/image.5 ... False
+>
 > --- /dev/fd/63  2020-05-16 22:20:05.030429705 +0800
+>
 > +++ /dev/fd/62  2020-05-16 22:20:05.030429705 +0800
+>
 > @@ -54,5 +54,5 @@
+>
 >  Inode 2:
->        size: 965 bytes
->        direct blocks: 4
+>
+> ​     size: 965 bytes
+>
+> ​     direct blocks: 4
+>
 > -23 disk block reads
+>
 > +27 disk block reads
+>
 >  10 disk block writes
+>
 > Testing remove in /tmp/tmp.ry27gDmNee/image.20 ... False
+>
 > --- /dev/fd/63  2020-05-16 22:20:05.038429478 +0800
+>
 > +++ /dev/fd/62  2020-05-16 22:20:05.038429478 +0800
+>
 > @@ -41,5 +41,5 @@
->      direct blocks: 4 5 6 7 8
->        indirect block: 9
->        indirect data blocks: 13 14
->   -31 disk block reads
+>
+> ​     direct blocks: 4 5 6 7 8
+>
+> ​     indirect block: 9
+>
+> ​     indirect data blocks: 13 14
+>
+> -31 disk block reads
+>
 > -11 disk block writes
+>
 > +41 disk block reads
+>
 > +18 disk block writes
+>
 > Testing stat on data/image.5 ... Success
+>
 > Testing stat on data/image.20 ... Success
+>
 > Testing stat on data/image.200 ... Success
+>
 > Testing valgrind on /tmp/tmp.0xOvTFPQph/image.200 ... Success
 
 ### Cat on data/image.20
@@ -211,8 +284,11 @@ Let's walk through those "failures" one by one.
 This one is because my implementation used less reads. 
 
 > ...
+>
 > -20 disk block reads
+>
 > +21 disk block reads
+>
 > ...
 
 ### Create in data/image.5.create
@@ -220,15 +296,24 @@ This one is because my implementation used less reads.
 This one only gives me a `False` with no more information. Thus I modified the test shell code to seek more details. Here is the actual result. 
 
 > Testing create in data/image.5.create ... False
+>
 > --- /dev/fd/63  2020-05-16 18:03:27.829294066 +0800
+>
 > +++ /dev/fd/62  2020-05-16 18:03:27.829294066 +0800
+>
 > @@ -524,5 +524,5 @@
->  Inode 127:
->      size: 0 bytes
->      direct blocks:
+>
+> Inode 127:
+>
+>   size: 0 bytes
+>
+>   direct blocks:
+>
 > -134 disk block reads
+>
 > +261 disk block reads
->  127 disk block writes
+>
+> 127 disk block writes
 
 You can see that this is also because my implementation has better read performance. 
 
@@ -239,6 +324,7 @@ You can see that this is also because my implementation has better read performa
    > ...
    >
    > -17 disk block reads
+   >
    > +25 disk block reads
    >
    > ...
@@ -248,8 +334,9 @@ You can see that this is also because my implementation has better read performa
    > ...
    >
    > -23 disk block reads
+   >
    > +27 disk block reads
-   > 
+   >
    > ...
 
 ### Remove in /tmp/tmp.ry27gDmNee/image.20
@@ -257,9 +344,13 @@ You can see that this is also because my implementation has better read performa
 In this case, my implementation is better in both read and write. 
 
 > ...
+>
 > -31 disk block reads
+>
 > -11 disk block writes
+>
 > +41 disk block reads
+>
 > +18 disk block writes
 
 
